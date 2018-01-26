@@ -1,0 +1,30 @@
+About:
+======
+
+The code included in this package solves LU Factorizations of Hierarchical Matrices (including dense and null blocks).
+The code has been tested with OmpSs-2 and MCC (Mercurium) compiler.
+
+Building the library:
+=====================
+
+1. Link correctly MKL sequential library editing the "Makefile" file.
+
+2. Load OmpSs and MKL modules (if necessary).
+
+2. Build the project by running
+    make
+
+Running the tests:
+==================
+
+3. Run the tests by
+    cd tests
+    ./Execute.sh
+
+Remark 1: Two small Hierarchical Matrices are provided (in "H-Matrices" folder) to run the tests.
+Remark 2: Tests results are stored in the file "Tests_results.txt inside" "tests" folder.
+
+Contact:
+========
+In case of questions and/or troubles, contact 
+Rocío Carratalá-Saéz (rcarrata@uji.es)

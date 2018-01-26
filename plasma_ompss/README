@@ -1,0 +1,32 @@
+About:
+======
+
+This package contains a subset of the PLASMA software library,
+https://bitbucket.org/icl/plasma
+Selected functions are ported from the OpenMP to the OmpSs
+with the Nanos6 task-based runtime.
+The code has been tested with GNU C compiler.
+
+Building the library:
+=====================
+
+1. Prepare a
+    make.inc
+   file corresponding to your setting. A good practice is to edit
+   the provided template
+    make.inc.example
+
+2. Build the project by running
+    make
+
+Running the tests:
+==================
+
+3. Run the tests by
+    cd testing-intertwine
+    ./plasma_testing_intertwine.py
+
+Contact:
+========
+In case of questions and/or troubles, contact 
+Jakub Sistek (jakub.sistek@manchester.ac.uk)

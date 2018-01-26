@@ -1,0 +1,46 @@
+# PLASMA example make.inc, using Intel MKL and gcc
+#
+# PLASMA is a software package provided by:
+# University of Tennessee, US,
+# University of Manchester, UK.
+
+# --------------------
+# programs
+
+CC        = mcc
+
+ARCH      = ar
+ARCHFLAGS = cr
+RANLIB    = ranlib
+
+
+# --------------------
+# flags
+
+# Use -fPIC to make shared (.so) and static (.a) libraries;
+# can be commented out if making only static libraries.
+FPIC      = 
+CFLAGS    = -k -O3 --ompss-v2 -g -std=c99 -Wall -Wshadow -Wno-unused-function
+LDFLAGS   = -k -O3 --ompss-v2
+# options for MKL
+CFLAGS   += -DPLASMA_WITH_MKL \
+            -DMKL_Complex16="double _Complex" \
+            -DMKL_Complex8="float _Complex"
+
+# --------------------
+# libraries
+MKL_DIR=/mnt/volume100/intel/mkl
+
+# help the Make to find MKL where it is installed on intertwine-ci
+MKLROOT = $(MKL_DIR)
+
+# This assumes $MKLROOT is set in your environment.
+# Add these to your .cshrc or .bashrc, adjusting for where MKL is installed:
+# in .cshrc:   source /opt/intel/bin/compilervars.csh intel64
+# in .bashrc:  source /opt/intel/bin/compilervars.sh  intel64
+
+# With gcc OpenMP (libgomp), use -lmkl_sequential or (-lmkl_gnu_thread   with MKL_NUM_THREADS=1).
+# With icc OpenMP (liomp5),  use -lmkl_sequential or (-lmkl_intel_thread with MKL_NUM_THREADS=1).
+LIBS      = -L$(MKLROOT)/lib/intel64 -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lm
+LIBS     += -lnanos6-optimized
+INC       = -I$(MKLROOT)/include
