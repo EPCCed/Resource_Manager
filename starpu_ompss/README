@@ -1,0 +1,39 @@
+About:
+======
+
+The code included in this package solves the matrix multiplication problem by
+distributing the matrix blocks to StarPU tasks. These blocks are then further
+split in subblocks, that are run on OmpSs tasks.
+
+The code has been tested with GNU C compiler.
+
+Building the library:
+=====================
+
+1. Edit the top lines of the Makefile to fit your environment
+
+2. Build by running
+    make
+
+Running the tests:
+==================
+
+3. Run the tests by
+    make check
+
+Comments:
+=========
+ - Please use Nanos 6 in resource-manager branch, and Mercurium in commit 5aa4b46
+ - To enable result checking, define "CHECK_RESULT" on main.c
+ - With the current version of DDSs, it is not possible to check the correct
+   result of the test. This is because StarPU works with column-major, whereas
+   DDSs works with row-major.
+ - Other versions can be compiled by changing "INTEROP_KERNEL" on
+   starpu_dgemm.c. "BLAS" version runs the StarPU blocks using MKL. "OMPSS"
+   runs the StarPU blocks using OmpSs-2 native interface. "OPENCL", the
+   default, runs the StarPU blocks using OmpSs-2 called from OpenCL.
+
+Contact:
+========
+In case of questions and/or troubles, contact
+Marc Marí Barceló (marc.maribarcelo@bsc.es)

@@ -1,0 +1,75 @@
+The resource manager API can be used in two different ways:
+ - Native API: the API specific to each runtime. Each has similiar functionalities
+   but the calls are different.
+ - OpenCL: a generic API that can be used to run tasks in any runtime running.
+
+Nanos6 Resource Manager Native API
+----------------------------------
+The main function of Nanos6 resource manager API is the following:
+
+void nanos_spawn_function(void (*function)(void *),
+                        void *args,
+                        void (*completion_callback)(void *),
+                        void *completion_args,
+                        char const *label,
+                        cpu_set_t *cpu_mask)
+
+Where:
+ - function: pointer to the task function
+ - args: pointer to the arguments to be passed to 'function'.
+ - completion_callback: pointer to the function that will be called when the
+   task finishes.
+ - completion_args: pointer to the arguments to be passed to 'completion_callback'
+ - label: string to identify the task (for debug purposes)
+ - cpu_mask: mask of CPUs assigned to this task
+
+This function submits the new task to the runtime and returns. Waiting for this
+task to finish can be done through the callback.
+
+StarPU Resource Manager Native API
+----------------------------------
+The main function of StarPU resource manager API is the following:
+
+void starpurm_spawn_kernel_on_cpus_callback(void *data,
+                                        void(*f)(void *),
+                                        void *args,
+                                        hwloc_cpuset_t cpuset,
+                                        void(*cb_f)(void *),
+                                        void *cb_args)
+
+Where:
+ - data: currently NULL
+ - f: pointer to the task function
+ - args: pointer to the arguments to be passed to 'f'
+ - cpuset: mask of CPUs assigned to this task
+ - cb_f: pointer ot the function that will be called when the task finishes
+ - cb_args: pointer to the arguments to be passed to 'cb_f'
+
+This function submits the new task to the runtime and returns. Waiting for this
+task to finish can be done through the callback.
+
+OpenCL Resource Manager API
+---------------------------
+The main function of the OpenCL resource manager API is the following:
+
+cl_int clEnqueueNativeKernelWithType(cl_command_queue command_queue 
+                                void (CL_CALLBACK * user_func)(void *),
+                                void *args,
+                                size_t cb_args,
+                                cl_uint num_mem_objects,
+                                const cl_mem * mem_list,
+                                const void **args_mem_loc,
+                                cl_native_kernel_type type,
+                                cl_uint num_events_in_wait_list,
+                                const cl_event *event_wait_list,
+                                cl_event *event)
+
+
+This API is based on the OpenCL standard clEnqueueNativeKernel function. The
+only difference with this function is the 'type' argument which can be:
+ - CL_NATIVE_KERNEL_OMPSS: OmpSs task
+ - CL_NATIVE_KERNEL_STARPU: StarPU task
+ - CL_NATIVE_KERNEL_DEFAULT: no runtime. Run directly
+
+For this API, the resource (CPU) management is done (like it is usual in OpenCL)
+using devices, subdevices and queues.
