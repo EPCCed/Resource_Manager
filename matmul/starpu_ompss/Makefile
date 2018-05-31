@@ -12,13 +12,21 @@ FLAGS = -O3 -Wall $(LASS_FLAGS)
 
 .PHONY: all outdir lass clean check
 
-all: outdir lass $(OUT_DIR)/interop_starpu_opencl_ompss
+all: outdir lass $(OUT_DIR)/interop_starpu_ompss
 
-$(OUT_DIR)/interop_starpu_opencl_ompss: $(OUT_DIR)/ompss_dgemm.o $(OUT_DIR)/opencl_dgemm.o $(OUT_DIR)/starpu_dgemm.o $(OUT_DIR)/main.o
+opencl: outdir lass $(OUT_DIR)/interop_starpu_opencl_ompss
+
+$(OUT_DIR)/interop_starpu_opencl_ompss: $(OUT_DIR)/ompss_dgemm.o $(OUT_DIR)/opencl_dgemm.o $(OUT_DIR)/starpu_opencl_dgemm.o $(OUT_DIR)/main.o
 	$(CC) $(FLAGS) -L$(STARPU_HOME)/lib -L$(MKL_HOME)/lib/intel64 -L$(LASS_HOME) -L$(NANOS6_HOME)/lib -L$(OPENCL_HOME)/lib -L$(HWLOC_HOME)/lib $? -o $@ -Wl,-Bstatic -llass -Wl,-Bdynamic -lstarpu-1.3 -lstarpurm-1.3 -lmkl_sequential -lmkl_core -lmkl_rt -lnanos6 -lpocl
+
+$(OUT_DIR)/interop_starpu_ompss: $(OUT_DIR)/ompss_dgemm.o $(OUT_DIR)/starpu_dgemm.o $(OUT_DIR)/main.o
+	$(CC) $(FLAGS) -DENABLE_OPENCL -L$(STARPU_HOME)/lib -L$(MKL_HOME)/lib/intel64 -L$(LASS_HOME) -L$(NANOS6_HOME)/lib -L$(HWLOC_HOME)/lib $? -o $@ -Wl,-Bstatic -llass -Wl,-Bdynamic -lstarpu-1.3 -lstarpurm-1.3 -lmkl_sequential -lmkl_core -lmkl_rt -lnanos6
 
 $(OUT_DIR)/ompss_dgemm.o: $(SRC_DIR)/ompss_dgemm.c
 	$(CC) $(FLAGS) -I$(LASS_HOME)/include -I$(NANOS6_HOME)/include -I$(MKL_HOME)/include $? -c -o $@
+
+$(OUT_DIR)/starpu_opencl_dgemm.o: $(SRC_DIR)/starpu_dgemm.c
+	$(CC) $(FLAGS) -I$(STARPU_HOME)/include/starpu/1.3 -I$(STARPU_HOME)/include/starpurm/1.3 -I$(HWLOC_HOME)/include -I$(MKL_HOME)/include $? -c -o $@
 
 $(OUT_DIR)/starpu_dgemm.o: $(SRC_DIR)/starpu_dgemm.c
 	$(CC) $(FLAGS) -I$(STARPU_HOME)/include/starpu/1.3 -I$(STARPU_HOME)/include/starpurm/1.3 -I$(HWLOC_HOME)/include -I$(MKL_HOME)/include $? -c -o $@
@@ -40,6 +48,6 @@ $(OUT_DIR):
 clean:
 	rm -rf $(OUT_DIR)/*.o $(OUT_DIR)/interop_starpu_opencl_ompss
 
-check: outdir $(OUT_DIR)/interop_starpu_opencl_ompss
+check: outdir $(OUT_DIR)/interop_starpu_ompss
 	test/run_test_intertwine.sh
 	

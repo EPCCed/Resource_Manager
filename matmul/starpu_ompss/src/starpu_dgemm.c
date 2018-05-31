@@ -11,12 +11,15 @@
 #include <starpu.h>
 #include <mkl.h>
 
-
 #define KERNEL_BLAS 1
 #define KERNEL_OMPSS 2
 #define KERNEL_OPENCL 3
 
+#ifdef ENABLE_OPENCL
 #define INTEROP_KERNEL KERNEL_OPENCL
+#else
+#define INTEROP_KERNEL KERNEL_OMPSS
+#endif
 
 #if INTEROP_KERNEL == KERNEL_OMPSS
 #include "ompss_dgemm.h"

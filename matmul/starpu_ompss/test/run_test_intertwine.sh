@@ -8,7 +8,7 @@ passed=0
 total=1
 
 path=$(dirname $0)
-bin_name=interop_starpu_opencl_ompss
+bin_name=interop_starpu_ompss
 $path/../bin/${bin_name} 8192 8192 8192 >& /dev/null
 
 if [ $? == 0 ]; then
