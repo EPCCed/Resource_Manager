@@ -42,7 +42,7 @@ int nbody_compare_particles(const particles_t *local, const particles_t *referen
 		}
 	}
 	
-	double relative_error = error / (3.0 * count);
+	double relative_error = (count != 0) ? error / (3.0 * count) : 0.0;
 	if ((count * 100.0) / (num_particles) > 0.6 || relative_error > TOLERATED_ERROR) {
 		return 0;
 	}

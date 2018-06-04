@@ -1,4 +1,5 @@
-#include "blocking/mpi/nbody.h"
+#include "blocking/gaspi/nbody.h"
+#include "blocking/gaspi/macros.h"
 
 #include <assert.h>
 #include <math.h>
@@ -7,22 +8,23 @@
 #include <string.h>
 
 #include <mpi.h>
+#include <GASPI.h>
+#include <GASPI_Ext.h>
 
 static void calculate_forces(forces_block_t *forces, const particles_block_t *block1, const particles_block_t *block2, const int num_blocks);
 static void update_particles(particles_block_t *particles, forces_block_t *forces, const int num_blocks, const float time_interval);
-static void exchange_particles(const particles_block_t *sendbuf, particles_block_t *recvbuf, const int num_blocks, const int rank, const int rank_size);
+static void exchange_particles(const particles_block_t *sendbuf, particles_block_t *recvbuf, const int num_blocks, const int rank, const int rank_size, nbody_t *nbody);
 static void calculate_forces_block(forces_block_t *forces, const particles_block_t *block1, const particles_block_t *block2);
 static void update_particles_block(particles_block_t *particles, forces_block_t *forces, const float time_interval);
-static void exchange_particles_block(const particles_block_t *sendbuf, particles_block_t *recvbuf, int block_id, int rank, int rank_size);
 
 void nbody_solve(nbody_t *nbody, const int num_blocks, const int timesteps, const float time_interval)
 {
 	assert(nbody != NULL);
 	assert(timesteps > 0);
 	
-	int rank, rank_size;
-	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	MPI_Comm_size(MPI_COMM_WORLD, &rank_size);
+	gaspi_rank_t rank, rank_size;
+	SUCCESS_OR_DIE(gaspi_proc_rank(&rank));
+	SUCCESS_OR_DIE(gaspi_proc_num(&rank_size));
 	
 	particles_block_t *local = nbody->local;
 	particles_block_t *remote1 = nbody->remote1;
@@ -36,7 +38,7 @@ void nbody_solve(nbody_t *nbody, const int num_blocks, const int timesteps, cons
 		for (int r = 0; r < rank_size; r++) {
 			calculate_forces(forces, local, sendbuf, num_blocks);
 			if (r < rank_size - 1) {
-				exchange_particles(sendbuf, recvbuf, num_blocks, rank, rank_size);
+				exchange_particles(sendbuf, recvbuf, num_blocks, rank, rank_size, nbody);
 			}
 			
 			particles_block_t *aux = recvbuf;
@@ -47,7 +49,7 @@ void nbody_solve(nbody_t *nbody, const int num_blocks, const int timesteps, cons
 		update_particles(local, forces, num_blocks, time_interval);
 	}
 	
-	MPI_Barrier(MPI_COMM_WORLD);
+	SUCCESS_OR_DIE(gaspi_barrier(GASPI_GROUP_ALL, GASPI_BLOCK));
 }
 
 void calculate_forces_N2(forces_block_t *forces, const particles_block_t *block1, const particles_block_t *block2, const int num_blocks)
@@ -82,11 +84,48 @@ void update_particles(particles_block_t *particles, forces_block_t *forces, cons
 	}
 }
 
-void exchange_particles(const particles_block_t *sendbuf, particles_block_t *recvbuf, const int num_blocks, const int rank, const int rank_size)
+void exchange_particles(const particles_block_t *sendbuf, particles_block_t *recvbuf, const int num_blocks, const int rank, const int rank_size, nbody_t *nbody)
 {
-	for (int i = 0; i < num_blocks; i++) {
-		exchange_particles_block(sendbuf+i, recvbuf+i, i, rank, rank_size);
-	}
+	gaspi_rank_t prev = MOD(rank - 1, rank_size);
+	gaspi_rank_t next = MOD(rank + 1, rank_size);
+	
+	gaspi_segment_id_t send_seg_id = SEGMENT_ID(nbody, sendbuf);
+	gaspi_segment_id_t recv_seg_id = SEGMENT_ID(nbody, recvbuf);
+	assert(send_seg_id != recv_seg_id);
+	
+	gaspi_queue_id_t queue;
+	SUCCESS_OR_DIE(gaspi_queue_group_get_queue(0, &queue));
+	
+	const gaspi_notification_id_t recv_not_id = 0;
+	const gaspi_notification_id_t send_not_id = 1;
+	gaspi_notification_id_t notified_id;
+	gaspi_notification_t notified_value;
+	
+	// Notify the prev rank that the data can be received
+	SUCCESS_OR_DIE(gaspi_notify(send_seg_id, prev, send_not_id, 1, queue, GASPI_BLOCK));
+	
+	// Wait the notification from the next rank to start the transmission
+	SUCCESS_OR_DIE(gaspi_notify_waitsome(send_seg_id, send_not_id, 1, &notified_id, GASPI_BLOCK));
+	assert(notified_id == send_not_id);
+	SUCCESS_OR_DIE(gaspi_notify_reset(send_seg_id, send_not_id, &notified_value));
+	assert(notified_value == 1);
+	
+	// Send the blocks to the next rank
+	gaspi_size_t size = num_blocks * sizeof(particles_block_t);
+	SUCCESS_OR_DIE(gaspi_write_notify(
+			send_seg_id, 0,
+			next, recv_seg_id, 0,
+			size, recv_not_id, 1,
+			queue, GASPI_BLOCK));
+	
+	// Wait the writes and notification to be sent
+	SUCCESS_OR_DIE(gaspi_wait(queue, GASPI_BLOCK));
+	
+	// Wait the data to be received
+	SUCCESS_OR_DIE(gaspi_notify_waitsome(recv_seg_id, recv_not_id, 1, &notified_id, GASPI_BLOCK));
+	assert(notified_id == recv_not_id);
+	SUCCESS_OR_DIE(gaspi_notify_reset(recv_seg_id, recv_not_id, &notified_value));
+	assert(notified_value == 1);
 }
 
 void calculate_forces_block(forces_block_t *forces, const particles_block_t *block1, const particles_block_t *block2)
@@ -162,26 +201,11 @@ void update_particles_block(particles_block_t *particles, forces_block_t *forces
 	memset(forces, 0, sizeof(forces_block_t));
 }
 
-void exchange_particles_block(const particles_block_t *sendbuf, particles_block_t *recvbuf, int block_id, int rank, int rank_size)
-{
-	int src = MOD(rank - 1, rank_size);
-	int dst = MOD(rank + 1, rank_size);
-	int size = sizeof(particles_block_t);
-	
-	if (rank % 2) {
-		MPI_Send(sendbuf, size, MPI_BYTE, dst, block_id+10, MPI_COMM_WORLD);
-		MPI_Recv(recvbuf, size, MPI_BYTE, src, block_id+10, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-	} else {
-		MPI_Recv(recvbuf, size, MPI_BYTE, src, block_id+10, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-		MPI_Send(sendbuf, size, MPI_BYTE, dst, block_id+10, MPI_COMM_WORLD);
-	}
-}
-
 void nbody_stats(const nbody_t *nbody, const nbody_conf_t *conf, double time)
 {
-	int rank, rank_size;
-	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	MPI_Comm_size(MPI_COMM_WORLD, &rank_size);
+	gaspi_rank_t rank, rank_size;
+	SUCCESS_OR_DIE(gaspi_proc_rank(&rank));
+	SUCCESS_OR_DIE(gaspi_proc_num(&rank_size));
 	
 	if (!rank) {
 		int particles = nbody->num_blocks * BLOCK_SIZE;
@@ -193,3 +217,4 @@ void nbody_stats(const nbody_t *nbody, const nbody_conf_t *conf, double time)
 		);
 	}
 }
+

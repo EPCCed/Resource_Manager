@@ -1,4 +1,5 @@
-#include "blocking/mpi/nbody.h"
+#include "blocking/gaspi/nbody.h"
+#include "blocking/gaspi/macros.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -7,23 +8,23 @@
 #include <unistd.h>
 
 #include <mpi.h>
-
-#ifdef INTEROPERABILITY
-#define DESIRED_THREAD_LEVEL (MPI_THREAD_MULTIPLE+1)
-#else
-#define DESIRED_THREAD_LEVEL (MPI_THREAD_MULTIPLE)
-#endif
+#include <GASPI.h>
+#include <GASPI_Ext.h>
 
 int main(int argc, char** argv)
 {
 	int provided;
-	MPI_Init_thread(&argc, &argv, DESIRED_THREAD_LEVEL, &provided);
-	assert(provided == DESIRED_THREAD_LEVEL);
+	MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+	assert(provided == MPI_THREAD_MULTIPLE);
 	
-	int rank, rank_size;
-	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	MPI_Comm_size(MPI_COMM_WORLD, &rank_size);
-	assert(rank_size > 0);
+	gaspi_rank_t rank, rank_size;
+#ifdef INTEROPERABILITY
+	SUCCESS_OR_DIE(gaspi_proc_init_mode(GASPI_MODE_TASK, GASPI_BLOCK));
+#else
+	SUCCESS_OR_DIE(gaspi_proc_init(GASPI_BLOCK));
+#endif
+	SUCCESS_OR_DIE(gaspi_proc_rank(&rank));
+	SUCCESS_OR_DIE(gaspi_proc_num(&rank_size));
 	
 	nbody_conf_t conf = nbody_get_conf(argc, argv);
 	assert(conf.num_particles > 0);
@@ -38,7 +39,7 @@ int main(int argc, char** argv)
 	assert(conf.num_blocks > 0);
 	
 	nbody_t nbody = nbody_setup(&conf);
-	MPI_Barrier(MPI_COMM_WORLD);
+	SUCCESS_OR_DIE(gaspi_barrier(GASPI_GROUP_ALL, GASPI_BLOCK));
 	
 	double start = get_time();
 	nbody_solve(&nbody, conf.num_blocks, conf.timesteps, conf.time_interval);
@@ -49,6 +50,8 @@ int main(int argc, char** argv)
 	if (conf.save_result) nbody_save_particles(&nbody);
 	if (conf.check_result) nbody_check(&nbody);
 	nbody_free(&nbody);
+	
+	SUCCESS_OR_DIE(gaspi_proc_term(GASPI_BLOCK));
 	
 	MPI_Finalize();
 	return 0;

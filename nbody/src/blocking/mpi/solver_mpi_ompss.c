@@ -11,10 +11,10 @@
 
 static void calculate_forces(forces_block_t *forces, const particles_block_t *block1, const particles_block_t *block2, const int num_blocks);
 static void update_particles(particles_block_t *particles, forces_block_t *forces, const int num_blocks, const float time_interval);
-static void forward_particles(const particles_block_t *sendbuf, particles_block_t *recvbuf, const int num_blocks, const int rank, const int rank_size);
+static void exchange_particles(const particles_block_t *sendbuf, particles_block_t *recvbuf, const int num_blocks, const int rank, const int rank_size);
 static void calculate_forces_block(forces_block_t *forces, const particles_block_t *block1, const particles_block_t *block2);
 static void update_particles_block(particles_block_t *particles, forces_block_t *forces, const float time_interval);
-static void forward_particles_block(const particles_block_t *sendbuf, particles_block_t *recvbuf, int block_id, int rank, int rank_size);
+static void exchange_particles_block(const particles_block_t *sendbuf, particles_block_t *recvbuf, int block_id, int rank, int rank_size);
 
 #ifdef INTEROPERABILITY
 int *serial = NULL;
@@ -43,11 +43,11 @@ void nbody_solve(nbody_t *nbody, const int num_blocks, const int timesteps, cons
 		for (int r = 0; r < rank_size; r++) {
 			calculate_forces(forces, local, sendbuf, num_blocks);
 			if (r < rank_size - 1) {
-				forward_particles(sendbuf, recvbuf, num_blocks, rank, rank_size);
+				exchange_particles(sendbuf, recvbuf, num_blocks, rank, rank_size);
 			}
 			
 			particles_block_t *aux = recvbuf;
-			recvbuf = (r == 0) ? remote2 : sendbuf;
+			recvbuf = (r != 0) ? sendbuf : remote2;
 			sendbuf = aux;
 		}
 		
@@ -90,10 +90,10 @@ void update_particles(particles_block_t *particles, forces_block_t *forces, cons
 	}
 }
 
-void forward_particles(const particles_block_t *sendbuf, particles_block_t *recvbuf, const int num_blocks, const int rank, const int rank_size)
+void exchange_particles(const particles_block_t *sendbuf, particles_block_t *recvbuf, const int num_blocks, const int rank, const int rank_size)
 {
 	for (int i = 0; i < num_blocks; i++) {
-		forward_particles_block(sendbuf+i, recvbuf+i, i, rank, rank_size);
+		exchange_particles_block(sendbuf+i, recvbuf+i, i, rank, rank_size);
 	}
 }
 
@@ -172,8 +172,8 @@ void update_particles_block(particles_block_t *particles, forces_block_t *forces
 	memset(forces, 0, sizeof(forces_block_t));
 }
 
-#pragma oss task in(*sendbuf) out(*recvbuf) inout(*serial) label(forward_particles_block)
-void forward_particles_block(const particles_block_t *sendbuf, particles_block_t *recvbuf, int block_id, int rank, int rank_size)
+#pragma oss task in(*sendbuf) out(*recvbuf) inout(*serial) label(exchange_particles_block)
+void exchange_particles_block(const particles_block_t *sendbuf, particles_block_t *recvbuf, int block_id, int rank, int rank_size)
 {
 	int src = MOD(rank - 1, rank_size);
 	int dst = MOD(rank + 1, rank_size);
@@ -198,7 +198,7 @@ void nbody_stats(const nbody_t *nbody, const nbody_conf_t *conf, double time)
 		int particles = nbody->num_blocks * BLOCK_SIZE;
 		int total_particles = particles * rank_size;
 		
-		printf("bigo, %s, processes, %d, threads, %d, timesteps, %d, total_particles, %d, particles_per_proc, %d, block_size, %d, blocks_per_proc, %d, time, %g, performance, %g\n",
+		printf("bigo, %s, processes, %d, threads, %d, timesteps, %d, total_particles, %d, particles_per_proc, %d, block_size, %d, blocks_per_proc, %d, time, %.2f, performance, %.2f\n",
 			TOSTRING(BIGO), rank_size, nanos_get_num_cpus(), nbody->timesteps, total_particles, particles, BLOCK_SIZE,
 			nbody->num_blocks, time, nbody_compute_throughput(total_particles, nbody->timesteps, time)
 		);

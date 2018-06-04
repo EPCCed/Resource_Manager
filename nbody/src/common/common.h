@@ -37,8 +37,8 @@ static const float default_mass_maximum   = 1.0e+28; /* kg */
 static const float default_time_interval  = 1.0e+0;  /* s  */
 static const int   default_seed           = 12345;
 static const char* default_name           = "data/nbody";
-static const int   default_num_particles  = 16384;
-static const int   default_timesteps      = 10;
+static const int   default_num_particles  = 0;
+static const int   default_timesteps      = 0;
 static const int   default_save_result    = 0;
 static const int   default_check_result   = 0;
 
