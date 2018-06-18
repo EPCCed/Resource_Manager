@@ -8,14 +8,16 @@ passed=0
 total=1
 
 path=$(dirname $0)
-bin_name=test_dpotrf
-$path/../bin/${bin_name} 8192 U >& /dev/null
+bin_name=interop_starpu_ompss
+$path/../bin/${bin_name} 8192 8192 8192 >& /dev/null
 
 if [ $? == 0 ]; then
 	echo "$bin_name PASSED"
 	passed=$(($passed + 1))
+	ret=0
 else
 	echo "$bin_name FAILED"
+	ret=1
 fi
 
 echo "---------------------------------"
@@ -26,3 +28,4 @@ else
 fi
 echo "---------------------------------"
 
+exit $ret
