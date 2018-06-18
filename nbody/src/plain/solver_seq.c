@@ -93,7 +93,7 @@ void update_particles(particles_t *particles, forces_t *forces, const int num_pa
 
 void nbody_stats(const nbody_t *nbody, const nbody_conf_t *conf, double time)
 {
-	printf("bigo, %s, timesteps, %d, total_particles, %d, time, %g, performance, %g\n",
+	printf("bigo, %s, timesteps, %d, total_particles, %d, time, %.2f, performance, %.2f\n",
 			TOSTRING(BIGO), nbody->timesteps, nbody->num_particles, time,
 			nbody_compute_throughput(nbody->num_particles, nbody->timesteps, time)
 	);

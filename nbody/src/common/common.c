@@ -16,6 +16,20 @@ void * nbody_alloc(size_t size)
 	return addr;
 }
 
+void nbody_print_usage(int argc, char **argv)
+{
+	fprintf(stderr, "Usage: %s <-p particles> <-t timesteps> [OPTION]...\n", argv[0]);
+	fprintf(stderr, "Parameters:\n");
+	fprintf(stderr, "  -p, --particles=PARTICLES\t\tuse PARTICLES as the total number of particles (default: 16384)\n");
+	fprintf(stderr, "  -t, --timesteps=TIMESTEPS\t\tuse TIMESTEPS as the number of timesteps (default: 10)\n\n");
+	fprintf(stderr, "Optional parameters:\n");
+	fprintf(stderr, "  -c, --check\t\t\t\tcheck the correctness of the result (disabled by default)\n");
+	fprintf(stderr, "  -C, --no-check\t\t\tdo not check the correctness of the result\n");
+	fprintf(stderr, "  -o, --output\t\t\t\tsave the computed particles to the default output file (disabled by default)\n");
+	fprintf(stderr, "  -O, --no-output\t\t\tdo not save the computed particles to the default output file\n");
+	fprintf(stderr, "  -h, --help\t\t\t\tdisplay this help and exit\n\n");
+}
+
 nbody_conf_t nbody_get_conf(int argc, char **argv)
 {
 	nbody_conf_t conf;
@@ -48,15 +62,7 @@ nbody_conf_t nbody_get_conf(int argc, char **argv)
 	while ((c = getopt_long(argc, argv, "hoOcCp:t:", long_options, &index)) != -1) {
 		switch (c) {
 			case 'h':
-				fprintf(stderr, "Usage: %s [OPTION]...\n", argv[0]);
-				fprintf(stderr, "Available options:\n");
-				fprintf(stderr, "  -p, --particles=PARTICLES\t\tuse PARTICLES as the total number of particles (default: 16384)\n");
-				fprintf(stderr, "  -t, --timesteps=TIMESTEPS\t\tuse TIMESTEPS as the number of timesteps (default: 10)\n");
-				fprintf(stderr, "  -c, --check\t\t\t\tcheck the correctness of the result (disabled by default)\n");
-				fprintf(stderr, "  -C, --no-check\t\t\tdo not check the correctness of the result\n");
-				fprintf(stderr, "  -o, --output\t\t\t\tsave the computed particles to the default output file (disabled by default)\n");
-				fprintf(stderr, "  -O, --no-output\t\t\tdo not save the computed particles to the default output file\n");
-				fprintf(stderr, "  -h, --help\t\t\t\tdisplay this help and exit\n");
+				nbody_print_usage(argc, argv);
 				exit(0);
 			case 'o':
 				conf.save_result = 1;
@@ -82,6 +88,12 @@ nbody_conf_t nbody_get_conf(int argc, char **argv)
 				abort();
 		}
 	}
+	
+	if (!conf.num_particles || !conf.timesteps) {
+		nbody_print_usage(argc, argv);
+		exit(1);
+	}
+	
 	return conf;
 }
 

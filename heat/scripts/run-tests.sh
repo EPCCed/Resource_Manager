@@ -4,7 +4,7 @@ function usage {
 	if [ "$#" -eq 1 ]; then
 		echo "Error: $1"
 	fi
-	echo "Usage: ./run-tests.sh [-p exec_path] [-np num_hybrid_procs] [-nt total_threads] [-s num_particles] [-t timesteps] [-h]"
+	echo "Usage: ./run-tests.sh [-p exec_path] [-np num_hybrid_procs] [-nt total_threads] [-s matrix_size] [-t timesteps] [-h]"
 	exit 1
 }
 
@@ -23,8 +23,8 @@ nprocs=2
 nthreads=4
 
 # Default execution parameters
-size=$((16*1024))
-timesteps=20
+size=$((8*1024))
+timesteps=100
 
 nargs=$#
 args=("$@")
@@ -68,23 +68,44 @@ echo "Configuration (Hybrid versions):"
 echo "  $nprocs processes"
 echo "  $nthreadsxproc threads per proc"
 echo "Execution parameters:"
-echo "  $size particles"
+echo "  $size x $size matrix"
 echo "  $timesteps timesteps"
 echo "Getting all '*.exe' files from path '$path'..."
 
 # Get all executable files from the desired path
 programs=("$path"/*.exe)
 
-# Oss loop is only supported by "fifo" and "naive" schedulers
-export NANOS6_SCHEDULER=fifo
 export NANOS6=optimized
 
-logfile=.nbody_log
+reffile=.heat_ref.ppm
+tmpfile=.heat_tmp.ppm
 
-rm -f $logfile
+rm -f $reffile
+rm -f $tmpfile
 
 total=0
 failed=0
+
+seq_prog=false
+for ((i = 0; i < ${#programs[@]}; i++)); do
+	prog="${programs[$i]}"
+	progname=$(getprogname "$prog")
+	if [[ $progname == *"_seq"* ]] && [ -f "$prog" ]; then
+		echo "Generating reference file from ${progname}..."
+		"$prog" -s $size -t $timesteps -o$reffile > /dev/null
+		error=$?
+		if [ "$error" -ne 0 ]; then
+			echo "Error: Sequential program has failed!"
+			exit 1
+		fi
+		seq_prog=true
+	fi
+done
+
+if [ "$seq_prog" == false ]; then
+	echo "Error: Sequential program not found!"
+	exit 1
+fi
 
 echo "Starting the verification..."
 echo ---------------------------------
@@ -100,14 +121,14 @@ for ((i = 0; i < ${#programs[@]}; i++)); do
 	progname=$(getprogname "$prog")
 
 	# Execution
-	if [[ $progname == *"_mpi."* ]] || [[ $progname == *"_gaspi."* ]]; then
-		mpiexec.hydra -n $nthreads "$prog" -p $size -t $timesteps -c &> $logfile
+	if [[ $progname == *"_mpi.pure"* ]] || [[ $progname == *"_gaspi.pure"* ]]; then
+		mpiexec.hydra -n $nthreads "$prog" -s $size -t $timesteps -o$tmpfile > /dev/null
 		error=$?
-	elif [[ $progname == *"_mpi_ompss"* ]] || [[ $progname == *"_gaspi_ompss"* ]]; then
-		mpiexec.hydra -n $nprocs -bind-to hwthread:$nthreadsxproc "$prog" -p $size -t $timesteps -c &> $logfile
+	elif [[ $progname == *"_mpi"* ]] || [[ $progname == *"_gaspi"* ]]; then
+		mpiexec.hydra -n $nprocs -bind-to hwthread:$nthreadsxproc "$prog" -s $size -t $timesteps -o$tmpfile > /dev/null
 		error=$?
 	else
-		"$prog" -p $size -t $timesteps -c &> $logfile
+		"$prog" -s $size -t $timesteps -o$tmpfile > /dev/null
 		error=$?
 	fi
 
@@ -115,12 +136,12 @@ for ((i = 0; i < ${#programs[@]}; i++)); do
 	if [ "$error" -ne 0 ]; then
 		failed=$(($failed + 1))
 		echo $progname FAILED
-		rm -f $logfile
+		rm -f $tmpfile
 		continue;
 	fi
 
 	# Result checking
-	grep -Fxq 'Result validation: OK' $logfile
+	diff $reffile $tmpfile > /dev/null
 	error=$?
 	if [ "$error" -eq 0 ]; then
 		echo $progname PASSED
@@ -128,10 +149,11 @@ for ((i = 0; i < ${#programs[@]}; i++)); do
 		failed=$(($failed + 1))
 		echo $progname FAILED
 	fi
-	rm -f $logfile
+	rm -f $tmpfile
 done
 
-rm -f $logfile
+rm -f $reffile
+rm -f $tmpfile
 
 echo ---------------------------------
 if [ $failed -eq 0 ]; then
@@ -142,3 +164,4 @@ else
 	exit 1
 fi
 echo ---------------------------------
+

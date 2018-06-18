@@ -13,9 +13,6 @@ LDFLAGS=
 BIGO?=N2
 BS?=2048
 
-# Interoperability flags
-INTEROP_FLAGS=$(INTEROPERABILITY_HOME)/lib/libmpiompss-interop.a
-
 # Preprocessor flags
 CPPFLAGS+=-Isrc -DBIGO=$(BIGO) -D_BIGO_$(BIGO) -DBLOCK_SIZE=$(BS)
 
@@ -26,83 +23,99 @@ MCCFLAGS+=--ompss-2 $(CFLAGS) --Wn,-O3,-std=gnu11
 # Linker flags
 LDFLAGS+=-lrt -lm -lstdc++
 
-SEQUENTIAL_PLAIN_SOURCES=  \
-	src/common/common.c    \
-	src/plain/utils.c      \
-	src/plain/solver_seq.c \
-	src/plain/main.c
+# Interoperability flags
+INTEROP_DEFINE=-DINTEROPERABILITY
+MPI_INTEROP_LDFLAGS=-L$(MPI_INTEROP_HOME)/lib -L$(MPI_INTEROP_HOME)/lib64 -l:libmpiompss-interop.a
 
-SEQUENTIAL_SOURCES=                    \
-	src/common/common.c                \
-	src/blocking/common/common_utils.c \
-	src/blocking/smp/utils.c           \
-	src/blocking/smp/solver_seq.c      \
-	src/blocking/smp/main.c
+# GASPI Flags
+GASPI_DEVICE?=ib
+GASPI_CFLAGS=-I$(GASPI_HOME)/include
+GASPI_LDFLAGS=-L$(GASPI_HOME)/lib -L$(GASPI_HOME)/lib64 -lGPI2 -lpthread -lrt
+GASPI_INTEROP_LDFLAGS=-L$(GASPI_INTEROP_HOME)/lib -L$(GASPI_INTEROP_HOME)/lib64 -lGPI2-ompss -lpthread -lrt
 
-OPENMP_PLAIN_SOURCES=      \
-	src/common/common.c    \
-	src/plain/utils.c      \
-	src/plain/solver_omp.c \
-	src/plain/main.c
+ifeq ($(GASPI_DEVICE),ib)
+GASPI_LDFLAGS+=-libverbs
+GASPI_INTEROP_LDFLAGS+=-libverbs
+endif
 
-OMPSS_SOURCES=                         \
-	src/common/common.c                \
-	src/blocking/common/common_utils.c \
-	src/blocking/smp/utils.c           \
-	src/blocking/smp/solver_ompss.c    \
-	src/blocking/smp/main.c
+PLAIN_SOURCES=          \
+    src/common/common.c \
+    src/plain/utils.c   \
+    src/plain/main.c
+
+SMP_SOURCES=                           \
+    src/common/common.c                \
+    src/blocking/common/common_utils.c \
+    src/blocking/smp/utils.c           \
+    src/blocking/smp/main.c
 
 MPI_SOURCES=                           \
-	src/common/common.c                \
-	src/blocking/common/common_utils.c \
-	src/blocking/mpi/utils.c           \
-	src/blocking/mpi/solver_mpi.c      \
-	src/blocking/mpi/main.c
+    src/common/common.c                \
+    src/blocking/common/common_utils.c \
+    src/blocking/mpi/utils.c           \
+    src/blocking/mpi/main.c
 
-MPI_OMPSS_SOURCES=                      \
-	src/common/common.c                 \
-	src/blocking/common/common_utils.c  \
-	src/blocking/mpi/utils.c            \
-	src/blocking/mpi/solver_mpi_ompss.c \
-	src/blocking/mpi/main.c
+GASPI_SOURCES=                         \
+    src/common/common.c                \
+    src/blocking/common/common_utils.c \
+    src/blocking/gaspi/utils.c         \
+    src/blocking/gaspi/main.c
 
-PROGS= \
-	nbody_seq_plain.$(BIGO).exe       \
-	nbody_omp_plain.$(BIGO).exe       \
-	nbody_seq.$(BIGO).$(BS).exe       \
-	nbody_ompss.$(BIGO).$(BS).exe     \
-	nbody_mpi.$(BIGO).$(BS).exe       \
-	nbody_mpi_ompss.$(BIGO).$(BS).exe
+PROGS=                                \
+    nbody_seq_plain.$(BIGO).exe       \
+    nbody_omp_plain.$(BIGO).exe       \
+    nbody_seq.$(BIGO).$(BS).exe       \
+    nbody_ompss.$(BIGO).$(BS).exe     \
+    nbody_mpi.$(BIGO).$(BS).exe       \
+    nbody_mpi_ompss.$(BIGO).$(BS).exe
 
-ifdef INTEROPERABILITY_HOME
+ifdef MPI_INTEROP_HOME
 PROGS+=nbody_mpi_ompss_interop.$(BIGO).$(BS).exe
+endif
+
+ifdef GASPI_HOME
+PROGS+=nbody_gaspi.$(BIGO).$(BS).exe
+PROGS+=nbody_gaspi_ompss.$(BIGO).$(BS).exe
+endif
+
+ifdef GASPI_INTEROP_HOME
+PROGS+=nbody_gaspi_ompss_interop.$(BIGO).$(BS).exe
 endif
 
 all: $(PROGS)
 
-nbody_seq_plain.$(BIGO).exe: $(SEQUENTIAL_PLAIN_SOURCES)
+nbody_seq_plain.$(BIGO).exe: $(PLAIN_SOURCES) src/plain/solver_seq.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-nbody_omp_plain.$(BIGO).exe: $(OPENMP_PLAIN_SOURCES)
+nbody_omp_plain.$(BIGO).exe: $(PLAIN_SOURCES) src/plain/solver_omp.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -fopenmp -o $@ $^ $(LDFLAGS)
 
-nbody_seq.$(BIGO).$(BS).exe: $(SEQUENTIAL_SOURCES)
+nbody_seq.$(BIGO).$(BS).exe: $(SMP_SOURCES) src/blocking/smp/solver_seq.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-nbody_ompss.$(BIGO).$(BS).exe: $(OMPSS_SOURCES)
+nbody_ompss.$(BIGO).$(BS).exe: $(SMP_SOURCES) src/blocking/smp/solver_ompss.c
 	$(MCC) $(CPPFLAGS) $(MCCFLAGS) -o $@ $^ $(LDFLAGS)
 
-nbody_mpi.$(BIGO).$(BS).exe: $(MPI_SOURCES)
+nbody_mpi.$(BIGO).$(BS).exe: $(MPI_SOURCES) src/blocking/mpi/solver_mpi.c
 	$(MPICC) $(CPPFLAGS) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-nbody_mpi_ompss.$(BIGO).$(BS).exe: $(MPI_OMPSS_SOURCES)
+nbody_mpi_ompss.$(BIGO).$(BS).exe: $(MPI_SOURCES) src/blocking/mpi/solver_mpi_ompss.c
 	$(MPI_WRAPPERS) $(MPICC) $(CPPFLAGS) $(MCCFLAGS) -o $@ $^ $(LDFLAGS)
 
-nbody_mpi_ompss_interop.$(BIGO).$(BS).exe: $(MPI_OMPSS_SOURCES)
-	$(MPI_WRAPPERS) $(MPICC) -DINTEROPERABILITY $(CPPFLAGS) $(MCCFLAGS) -o $@ $^ $(LDFLAGS) $(INTEROP_FLAGS)
+nbody_mpi_ompss_interop.$(BIGO).$(BS).exe: $(MPI_SOURCES) src/blocking/mpi/solver_mpi_ompss.c
+	$(MPI_WRAPPERS) $(MPICC) $(INTEROP_DEFINE) $(CPPFLAGS) $(MCCFLAGS) -o $@ $^ $(LDFLAGS) $(MPI_INTEROP_LDFLAGS)
+
+nbody_gaspi.$(BIGO).$(BS).exe: $(GASPI_SOURCES) src/blocking/gaspi/solver_gaspi.c
+	$(MPICC) $(CPPFLAGS) $(CFLAGS) $(GASPI_CFLAGS) -o $@ $^ $(LDFLAGS) $(GASPI_LDFLAGS)
+
+nbody_gaspi_ompss.$(BIGO).$(BS).exe: $(GASPI_SOURCES) src/blocking/gaspi/solver_gaspi_ompss.c
+	$(MPI_WRAPPERS) $(MPICC) $(CPPFLAGS) $(MCCFLAGS) $(GASPI_CFLAGS) -o $@ $^ $(LDFLAGS) $(GASPI_LDFLAGS)
+
+nbody_gaspi_ompss_interop.$(BIGO).$(BS).exe: $(GASPI_SOURCES) src/blocking/gaspi/solver_gaspi_ompss.c
+	$(MPI_WRAPPERS) $(MPICC) $(INTEROP_DEFINE) $(CPPFLAGS) $(MCCFLAGS) $(GASPI_CFLAGS) -o $@ $^ $(LDFLAGS) $(GASPI_INTEROP_LDFLAGS)
 
 check: all
-	@./scripts/run-tests.sh $(PROGS)
+	@./scripts/run-tests.sh
 
 clean:
 	rm -f *.o *.exe
